@@ -1,4 +1,5 @@
 #include "PID.h"
+#include "mbed.h"
 
 PID::PID() {}
 
@@ -18,7 +19,10 @@ void PID::init(float Kp, float Ki, float Kd, float int_atten) {
   delta_v = 0.0;
 }
 float PID::getError(int lfs1, int lfs2, int lfs3) {
-  int c = lfs3 + lfs2 * 2 + lfs3 * 4;
+  c = lfs3 + lfs2 * 2 + lfs1 * 4;
+
+  //   printf("\n in the PID, c = %d\n", c);
+
   float current_error;
 
   switch (c) {
@@ -32,7 +36,7 @@ float PID::getError(int lfs1, int lfs2, int lfs3) {
     current_error = 1;
     break;
   case 7:
-    current_error = error * 2;
+    current_error = error;
     break;
   }
 
@@ -56,4 +60,10 @@ void PID::resetPID() {
   derivative = 0.0;
 
   delta_v = 0.0;
+}
+
+void PID::setPID(float Kp_, float Ki_, float Kd_) {
+  Kp = Kp_;
+  Ki = Ki_;
+  Kd = Kd_;
 }

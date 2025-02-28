@@ -16,36 +16,28 @@ PinName const acc_SDA = PTE25;
 PinName const acc_SCL = PTE24;
 
 // For the motor
-PinName const m_left_forward_ctrl = D5;
-PinName const m_left_backward_ctrl = D4;
+PinName const m_left_forward_ctrl = D2;
+PinName const m_left_backward_ctrl = D3;
 
-PinName const m_right_forward_ctrl = D2;
-PinName const m_right_backward_ctrl = D3;
+PinName const m_right_forward_ctrl = D5;
+PinName const m_right_backward_ctrl = D4;
 
 PinName const motor_enable = D13;
 
 // For the line-following sensor
-PinName const lfs1_p = D7;
-PinName const lfs2_p = D8;
-PinName const lfs3_p = D9;
+PinName const lfs1_p = PTE30;
+PinName const lfs2_p = PTE29;
+PinName const lfs3_p = PTE23;
 
 // // For the barcode sensor
 // PinName const bcs1_p = NC;
 // PinName const bcs2_p = NC;
 // PinName const bcs3_p = NC;
 
-float const Kp = 0.5;
-float const Ki = 0;
-float const Kd = 0;
-float const int_atten = 0;
-
 /**************************** Define all the constants*****************/
-#define LOOP_LENGTH 20ms
+#define LOOP_LENGTH 5ms
 
 #define MMA8451_I2C_ADDRESS (0x1d << 1)
-
-#define ACC 0.5         // linear acc
-#define ANGULAR_ACC 0.2 // angular acc
 
 #define MEM_SIZE 50
 
@@ -60,11 +52,20 @@ float const int_atten = 0;
 #define KEY_LF 'f'
 #define KEY_NULL '0'
 
+#define KEY_Kp_PLUS '1'
+#define KEY_Kp_MINUS '2'
+#define KEY_Ki_PLUS '3'
+#define KEY_Ki_MINUS '4'
+#define KEY_Kd_PLUS '5'
+#define KEY_Kd_MINUS '6'
+
+#define KEY_CORRECTION 'c'
+
 enum CtrlMode {
   FREE_CTRL,
-  MEM_UPDATING,         // green
-  MEM_LOADING,          // blue
-  LINE_FOLLOWING,       // red
+  MEM_UPDATING,   // green
+  MEM_LOADING,    // blue
+  LINE_FOLLOWING, // red
   DISABLED
 };
 
@@ -110,6 +111,23 @@ int main() {
   int8_t n_force_print = 0;
   bool is_first_loop_mem_loading = true;
 
+  float const acc = 0.1; // linear acc
+  float ang_acc = 0.4;   // angular acc
+
+  float v0 = 0.3;
+  float Kp = 0.32;
+  // For P controller, when Kp = 0.33 or 0.31, it works best.
+  // For PI controller, set
+  float Ki = 0.01;
+  float Kd = 0.01;
+  float int_atten = 0.9;
+
+  float slow_v_factor = 1;
+
+  bool lfs1_value = 1;
+  bool lfs2_value = 1;
+  bool lfs3_value = 1;
+
   /*
     w: acc
     s: deacc
@@ -117,7 +135,7 @@ int main() {
     d: turn right a certain angle
     q: stop and quit
   */
-  char mem_buffer[MEM_SIZE] = "wwwaaaaaassssssdddddwwwwwwwwwwq";
+  char mem_buffer[MEM_SIZE] = "wwssq";
 
   printf("successfully initailized\n");
   //   green_led = 1;
@@ -138,6 +156,14 @@ int main() {
     } else {
       key = '0';
     }
+
+    if (lfs1_value == lfs1 or lfs2_value == lfs2 or lfs3_value == lfs3) {
+      n_force_print = 1;
+    }
+
+    lfs1_value = !lfs1;
+    lfs2_value = !lfs2;
+    lfs3_value = !lfs3;
 
     /************************** UPDATE MODE ********************************/
 
@@ -198,9 +224,15 @@ int main() {
     case LINE_FOLLOWING: {
       red_led = 0;
 
-      //   pid.updatePID(lfs1, lfs2, lfs3);
-      //   left_v += pid.delta_v;
-      //   right_v -= pid.delta_v;
+      pid.updatePID(lfs1_value, lfs2_value, lfs3_value);
+
+      if (lfs2_value) {
+        left_v = v0 * slow_v_factor + pid.delta_v;
+        right_v = v0 * slow_v_factor - pid.delta_v;
+      } else {
+        left_v = v0 + pid.delta_v;
+        right_v = v0 - pid.delta_v;
+      }
 
       //   key = '0';
       break;
@@ -223,26 +255,33 @@ int main() {
     }
     /********************* CONTROL MOTOR *************************/
     case KEY_ACC: {
-      left_v += ACC;
-      right_v += ACC;
+      left_v += acc;
+      right_v += acc;
       break;
     }
     case KEY_DEACC: {
-      left_v -= ACC;
-      right_v -= ACC;
+      left_v -= acc;
+      right_v -= acc;
       break;
     }
     case KEY_L: {
-      left_v -= ANGULAR_ACC;
-      right_v += ANGULAR_ACC;
+      left_v -= ang_acc;
+      right_v += ang_acc;
       n_force_print = 2;
       break;
     }
     case KEY_R: {
-      left_v += ANGULAR_ACC;
-      right_v -= ANGULAR_ACC;
+      left_v += ang_acc;
+      right_v -= ang_acc;
       n_force_print = 2;
       break;
+    }
+    case KEY_CORRECTION: {
+      if (left_v > right_v) {
+        right_v = left_v;
+      } else {
+        left_v = right_v;
+      }
     }
     case KEY_Q: {
       mode = FREE_CTRL;
@@ -297,18 +336,58 @@ int main() {
       if (mode != LINE_FOLLOWING) {
         mode = LINE_FOLLOWING;
         pid.init(Kp, Ki, Kd, int_atten);
-      } else {
+      } else if (mode == LINE_FOLLOWING) {
         mode = FREE_CTRL;
+        left_v = 0;
+        right_v = 0;
       }
 
       break;
     }
+    /********************* TESTING *************************/
+    case KEY_Kp_PLUS: {
+      Kp += 0.01;
+      pid.setPID(Kp, Ki, Kd);
+      break;
+    }
+    case KEY_Kp_MINUS: {
+      Kp -= 0.01;
+      pid.setPID(Kp, Ki, Kd);
+      break;
+    }
+
+    case KEY_Ki_PLUS: {
+      Ki += 0.001;
+      pid.setPID(Kp, Ki, Kd);
+      break;
+    }
+    case KEY_Ki_MINUS: {
+      Ki -= 0.001;
+      pid.setPID(Kp, Ki, Kd);
+      break;
+    }
+
+    case KEY_Kd_PLUS: {
+      Kd += 0.01;
+      pid.setPID(Kp, Ki, Kd);
+      break;
+    }
+    case KEY_Kd_MINUS: {
+      Kd -= 0.01;
+      pid.setPID(Kp, Ki, Kd);
+      break;
+    }
     case KEY_NULL: {
-      red_led = 1;
+      //   red_led = 1;
       // if input is null, then cancel the voltage differnece to keep
       // the car going straightforward. choose the ave.
-      right_v = (left_v + right_v) / 2;
-      left_v = right_v;
+      //   if (left_v > right_v) {
+      //     left_v = right_v;
+      //   } else {
+      //     right_v = left_v;
+      //   }
+      //   right_v = (left_v + right_v) / 2;
+      //   left_v = right_v;
       break;
     }
     }
@@ -339,8 +418,15 @@ int main() {
 
     if (key != '0' or n_force_print) {
       printf("input: %c, mode: %d,\t", key, mode);
-      printf("lf_sensors: %d, %d, %d,\t", lfs1.read(), lfs2.read(),
-             lfs3.read());
+      printf("debug: %d m, %d m, %d m,\t", int(Kp * 1000), int(Ki * 1000),
+             int(Kd * 1000));
+
+      if (mode == LINE_FOLLOWING) {
+        printf("\n c: %d, error: %d, dv: %d, \n", pid.c, int(pid.error * 1000),
+               int(pid.delta_v * 1000));
+      }
+      //   int value_lfs1 = lfs1;
+      printf("lf_sensors: %d, %d, %d,\t", lfs1_value, lfs2_value, lfs3_value);
 
       printf("left_v = %dm\t right_v = %dm\n", int(left_v * 1000),
              int(right_v * 1000));

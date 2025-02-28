@@ -3,6 +3,9 @@
 
 class PID {
 public:
+  int c;
+
+  float error;
   float delta_v;
 
   PID();
@@ -15,9 +18,9 @@ public:
 
   void resetPID();
 
-private:
-  float error;
+  void setPID(float Kp, float Ki, float Kd);
 
+private:
   float Kp;
   float Ki;
   float Kd;
