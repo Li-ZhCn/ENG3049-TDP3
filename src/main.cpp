@@ -35,7 +35,7 @@ PinName const lfs3_p = PTE23;
 // PinName const bcs3_p = NC;
 
 /**************************** Define all the constants*****************/
-#define LOOP_LENGTH 5ms
+#define LOOP_LENGTH 1ms
 
 #define MMA8451_I2C_ADDRESS (0x1d << 1)
 
@@ -50,7 +50,7 @@ PinName const lfs3_p = PTE23;
 #define KEY_MEM_LOADING 'l'
 #define KEY_Q 'q'
 #define KEY_LF 'f'
-#define KEY_NULL '0'
+#define KEY_CORRECTION 'c'
 
 #define KEY_Kp_PLUS '1'
 #define KEY_Kp_MINUS '2'
@@ -59,7 +59,7 @@ PinName const lfs3_p = PTE23;
 #define KEY_Kd_PLUS '5'
 #define KEY_Kd_MINUS '6'
 
-#define KEY_CORRECTION 'c'
+#define KEY_NULL '0'
 
 enum CtrlMode {
   FREE_CTRL,
@@ -114,12 +114,11 @@ int main() {
   float const acc = 0.1; // linear acc
   float ang_acc = 0.4;   // angular acc
 
-  float v0 = 0.3;
-  float Kp = 0.32;
-  // For P controller, when Kp = 0.33 or 0.31, it works best.
-  // For PI controller, set
-  float Ki = 0.01;
-  float Kd = 0.01;
+  float v0 = 0.2;
+  float Kp = 0.2;
+  // For PID: 0.2; 0.01; 0.002;
+  float Ki = 0.010;
+  float Kd = 0.002;
   float int_atten = 0.9;
 
   float slow_v_factor = 1;
@@ -346,34 +345,34 @@ int main() {
     }
     /********************* TESTING *************************/
     case KEY_Kp_PLUS: {
-      Kp += 0.01;
+      Kp += 0.001;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
     case KEY_Kp_MINUS: {
-      Kp -= 0.01;
+      Kp -= 0.001;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
 
     case KEY_Ki_PLUS: {
-      Ki += 0.001;
+      Ki += 0.0001;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
     case KEY_Ki_MINUS: {
-      Ki -= 0.001;
+      Ki -= 0.0001;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
 
     case KEY_Kd_PLUS: {
-      Kd += 0.01;
+      Kd += 0.0001;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
     case KEY_Kd_MINUS: {
-      Kd -= 0.01;
+      Kd -= 0.0001;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
