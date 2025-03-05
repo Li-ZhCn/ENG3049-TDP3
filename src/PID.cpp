@@ -29,10 +29,15 @@ float PID::getError(int lfs1, int lfs2, int lfs3) {
   case 5:
     current_error = error * 0.5;
     break;
+  case 1:
+    current_error = -1;
+    break;
   case 3:
     current_error = -1;
     break;
   case 6:
+    current_error = 1;
+  case 4:
     current_error = 1;
     break;
   case 7:

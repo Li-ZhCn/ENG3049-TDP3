@@ -8,7 +8,6 @@
 #include "helper.h"
 #include "mbed.h"
 #include "motor.h"
-#include <cstdint>
 
 /********************* Define all the pin names********************/
 // For the accerometer
@@ -49,7 +48,9 @@ PinName const lfs3_p = PTE23;
 #define KEY_MEM_UPDATING 'u'
 #define KEY_MEM_LOADING 'l'
 #define KEY_Q 'q'
-#define KEY_LF 'f'
+#define KEY_LF_PID 'f'
+#define KEY_LF_C 'g'
+
 #define KEY_CORRECTION 'c'
 
 #define KEY_Kp_PLUS '1'
@@ -58,14 +59,17 @@ PinName const lfs3_p = PTE23;
 #define KEY_Ki_MINUS '4'
 #define KEY_Kd_PLUS '5'
 #define KEY_Kd_MINUS '6'
+#define KEY_v0_PLUS '7'
+#define KEY_v0_MINUS '8'
 
 #define KEY_NULL '0'
 
 enum CtrlMode {
   FREE_CTRL,
-  MEM_UPDATING,   // green
-  MEM_LOADING,    // blue
-  LINE_FOLLOWING, // red
+  MEM_UPDATING, // green
+  MEM_LOADING,  // blue
+  LF_PID,       // red
+  LF_C,         // red
   DISABLED
 };
 
@@ -114,11 +118,11 @@ int main() {
   float const acc = 0.1; // linear acc
   float ang_acc = 0.4;   // angular acc
 
-  float v0 = 0.2;
-  float Kp = 0.2;
+  float v0 = 0.018;
+  float Kp = 0.0100;
   // For PID: 0.2; 0.01; 0.002;
-  float Ki = 0.010;
-  float Kd = 0.002;
+  float Ki = 0.0120;
+  float Kd = 0.0010;
   float int_atten = 0.9;
 
   float slow_v_factor = 1;
@@ -220,7 +224,7 @@ int main() {
       }
       break;
     }
-    case LINE_FOLLOWING: {
+    case LF_PID: {
       red_led = 0;
 
       pid.updatePID(lfs1_value, lfs2_value, lfs3_value);
@@ -234,6 +238,30 @@ int main() {
       }
 
       //   key = '0';
+      break;
+    }
+    case LF_C: {
+      red_led = 0;
+      int c = lfs3_value + lfs2_value * 2 + lfs1_value * 4;
+      switch (c) {
+      case 1: {
+        right_v = 0.5;
+        left_v = 0;
+        break;
+        ;
+      }
+      case 2: {
+        left_v = 0.3;
+        right_v = 0.3;
+
+        break;
+      }
+      case 4: {
+        left_v = 0.5;
+        right_v = 0;
+        break;
+      }
+      }
       break;
     }
     case DISABLED: {
@@ -331,11 +359,24 @@ int main() {
       break;
     }
     /********************* LINE FOLLOWING *************************/
-    case KEY_LF: {
-      if (mode != LINE_FOLLOWING) {
-        mode = LINE_FOLLOWING;
+    case KEY_LF_PID: {
+      if (mode != LF_PID) {
+        mode = LF_PID;
         pid.init(Kp, Ki, Kd, int_atten);
-      } else if (mode == LINE_FOLLOWING) {
+      } else if (mode == LF_PID) {
+        mode = FREE_CTRL;
+        left_v = 0;
+        right_v = 0;
+      }
+
+      break;
+    }
+
+    case KEY_LF_C: {
+      if (mode != LF_C) {
+        mode = LF_C;
+        // pid.init(Kp, Ki, Kd, int_atten);
+      } else if (mode == LF_C) {
         mode = FREE_CTRL;
         left_v = 0;
         right_v = 0;
@@ -367,13 +408,21 @@ int main() {
     }
 
     case KEY_Kd_PLUS: {
-      Kd += 0.0001;
+      Kd += 0.001;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
     case KEY_Kd_MINUS: {
-      Kd -= 0.0001;
+      Kd -= 0.001;
       pid.setPID(Kp, Ki, Kd);
+      break;
+    }
+    case KEY_v0_PLUS: {
+      v0 += 0.001;
+      break;
+    }
+    case KEY_v0_MINUS: {
+      v0 -= 0.001;
       break;
     }
     case KEY_NULL: {
@@ -415,15 +464,18 @@ int main() {
     right_v = clamp(right_v, -1.0f, 1.0f);
     motor.setDutycycle('A', left_v, right_v);
 
+    /**************************** TEST LOG *****************************/
+
     if (key != '0' or n_force_print) {
       printf("input: %c, mode: %d,\t", key, mode);
-      printf("debug: %d m, %d m, %d m,\t", int(Kp * 1000), int(Ki * 1000),
-             int(Kd * 1000));
+      printf("debug: %d, %d, %d (1e-4), %d m\t", int(Kp * 10000),
+             int(Ki * 10000), int(Kd * 10000), int(v0 * 1000));
 
-      if (mode == LINE_FOLLOWING) {
-        printf("\n c: %d, error: %d, dv: %d, \n", pid.c, int(pid.error * 1000),
-               int(pid.delta_v * 1000));
-      }
+      //   if (mode == LF_PID) {
+      //     printf("\n c: %d, error: %d, dv: %d, \n", pid.c, int(pid.error *
+      //     1000),
+      //            int(pid.delta_v * 1000));
+      //   }
       //   int value_lfs1 = lfs1;
       printf("lf_sensors: %d, %d, %d,\t", lfs1_value, lfs2_value, lfs3_value);
 
