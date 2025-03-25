@@ -1,7 +1,7 @@
 #include "PID.h"
 #include "mbed.h"
 
-PID::PID() {}
+PID::PID() { printf("PID initialzed successfully\n"); }
 
 PID::~PID() {}
 

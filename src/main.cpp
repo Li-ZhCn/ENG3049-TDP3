@@ -5,6 +5,7 @@
 
 // #include "MMA8451Q.h"
 #include "PID.h"
+#include "barcode.h"
 #include "helper.h"
 #include "mbed.h"
 #include "motor.h"
@@ -29,12 +30,12 @@ PinName const lfs2_p = PTE29;
 PinName const lfs3_p = PTE23;
 
 // // For the barcode sensor
-// PinName const bcs1_p = NC;
-// PinName const bcs2_p = NC;
-// PinName const bcs3_p = NC;
+PinName const bcs1_p = PTE20;
+PinName const bcs2_p = PTE21;
+PinName const bcs3_p = PTE22;
 
 /**************************** Define all the constants*****************/
-#define LOOP_LENGTH 1ms
+#define LOOP_LENGTH 50ms
 
 #define MMA8451_I2C_ADDRESS (0x1d << 1)
 
@@ -49,7 +50,6 @@ PinName const lfs3_p = PTE23;
 #define KEY_MEM_LOADING 'l'
 #define KEY_Q 'q'
 #define KEY_LF_PID 'f'
-#define KEY_LF_C 'g'
 
 #define KEY_CORRECTION 'c'
 
@@ -69,7 +69,6 @@ enum CtrlMode {
   MEM_UPDATING, // green
   MEM_LOADING,  // blue
   LF_PID,       // red
-  LF_C,         // red
   DISABLED
 };
 
@@ -92,9 +91,7 @@ DigitalIn lfs1(lfs1_p);
 DigitalIn lfs2(lfs2_p);
 DigitalIn lfs3(lfs3_p);
 
-// DigitalIn bcs1(bcs1_p);
-// DigitalIn bcs2(bcs2_p);
-// DigitalIn bcs3(bcs3_p);
+Barcode bcs(bcs1_p, bcs2_p, bcs3_p);
 
 // DigitalIn
 DigitalIn force_mem_loading_input(D10, PullUp);
@@ -118,14 +115,14 @@ int main() {
   float const acc = 0.1; // linear acc
   float ang_acc = 0.4;   // angular acc
 
+  // For PID: 0.2; 0.01; 0.002;
+  // For PID: 0.01; 0.012; 0.001; v0 = 0.018; 0305 update for fully charged
+  // battery
   float v0 = 0.018;
   float Kp = 0.0100;
-  // For PID: 0.2; 0.01; 0.002;
   float Ki = 0.0120;
   float Kd = 0.0010;
   float int_atten = 0.9;
-
-  float slow_v_factor = 1;
 
   bool lfs1_value = 1;
   bool lfs2_value = 1;
@@ -140,12 +137,14 @@ int main() {
   */
   char mem_buffer[MEM_SIZE] = "wwssq";
 
-  printf("successfully initailized\n");
+  printf("all initailization finished successfully\n");
   //   green_led = 1;
+  PID pid = PID();
 
   /*************************** LOOP ***************************************/
   while (true) {
-    PID pid = PID();
+    bcs.updateState();
+
     // x = abs(acc.getAccX());
     // y = abs(acc.getAccY());
     // z = abs(acc.getAccZ());
@@ -229,41 +228,20 @@ int main() {
 
       pid.updatePID(lfs1_value, lfs2_value, lfs3_value);
 
-      if (lfs2_value) {
-        left_v = v0 * slow_v_factor + pid.delta_v;
-        right_v = v0 * slow_v_factor - pid.delta_v;
-      } else {
-        left_v = v0 + pid.delta_v;
-        right_v = v0 - pid.delta_v;
+      left_v = v0 + pid.delta_v;
+      right_v = v0 - pid.delta_v;
+
+      if (bcs.state == Barcode::bwb or bcs.state == Barcode::bww or
+          bcs.state == Barcode::wwb) {
+        left_v = 0.01;
+        right_v = 0.01;
       }
+      //   bcs.updateState();
 
       //   key = '0';
       break;
     }
-    case LF_C: {
-      red_led = 0;
-      int c = lfs3_value + lfs2_value * 2 + lfs1_value * 4;
-      switch (c) {
-      case 1: {
-        right_v = 0.5;
-        left_v = 0;
-        break;
-        ;
-      }
-      case 2: {
-        left_v = 0.3;
-        right_v = 0.3;
 
-        break;
-      }
-      case 4: {
-        left_v = 0.5;
-        right_v = 0;
-        break;
-      }
-      }
-      break;
-    }
     case DISABLED: {
       red_led = 1;
       blue_led = 1;
@@ -311,6 +289,8 @@ int main() {
       }
     }
     case KEY_Q: {
+      bcs.reset();
+
       mode = FREE_CTRL;
       mem_index = 0;
 
@@ -363,27 +343,17 @@ int main() {
       if (mode != LF_PID) {
         mode = LF_PID;
         pid.init(Kp, Ki, Kd, int_atten);
+        bcs.reset();
       } else if (mode == LF_PID) {
         mode = FREE_CTRL;
         left_v = 0;
         right_v = 0;
+        bcs.reset();
       }
 
       break;
     }
 
-    case KEY_LF_C: {
-      if (mode != LF_C) {
-        mode = LF_C;
-        // pid.init(Kp, Ki, Kd, int_atten);
-      } else if (mode == LF_C) {
-        mode = FREE_CTRL;
-        left_v = 0;
-        right_v = 0;
-      }
-
-      break;
-    }
     /********************* TESTING *************************/
     case KEY_Kp_PLUS: {
       Kp += 0.001;
@@ -426,16 +396,6 @@ int main() {
       break;
     }
     case KEY_NULL: {
-      //   red_led = 1;
-      // if input is null, then cancel the voltage differnece to keep
-      // the car going straightforward. choose the ave.
-      //   if (left_v > right_v) {
-      //     left_v = right_v;
-      //   } else {
-      //     right_v = left_v;
-      //   }
-      //   right_v = (left_v + right_v) / 2;
-      //   left_v = right_v;
       break;
     }
     }
@@ -468,8 +428,7 @@ int main() {
 
     if (key != '0' or n_force_print) {
       printf("input: %c, mode: %d,\t", key, mode);
-      printf("debug: %d, %d, %d (1e-4), %d m\t", int(Kp * 10000),
-             int(Ki * 10000), int(Kd * 10000), int(v0 * 1000));
+    //   printf("debug: %d, %d, %d (1e-4), %d m\t", int(Kp * 10000), int(Ki * 10000), int(Kd * 10000), int(v0 * 1000));
 
       //   if (mode == LF_PID) {
       //     printf("\n c: %d, error: %d, dv: %d, \n", pid.c, int(pid.error *
@@ -477,10 +436,9 @@ int main() {
       //            int(pid.delta_v * 1000));
       //   }
       //   int value_lfs1 = lfs1;
-      printf("lf_sensors: %d, %d, %d,\t", lfs1_value, lfs2_value, lfs3_value);
+    //   printf("lf_sensors: %d, %d, %d,\t", lfs1_value, lfs2_value, lfs3_value);
 
-      printf("left_v = %dm\t right_v = %dm\n", int(left_v * 1000),
-             int(right_v * 1000));
+    //   printf("left_v = %dm\t right_v = %dm\n", int(left_v * 1000), int(right_v * 1000));
 
       n_force_print -= 1;
       if (n_force_print <= 0) {

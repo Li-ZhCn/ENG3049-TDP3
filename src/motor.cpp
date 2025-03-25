@@ -5,6 +5,7 @@ Motor::Motor(PinName m_left_forward, PinName m_left_backward,
              PinName m_right_forward, PinName m_right_backward)
     : m_left_forward(m_left_forward), m_left_backward(m_left_backward),
       m_right_forward(m_right_forward), m_right_backward(m_right_backward) {
+  printf("motor initialzed succesfully\n");
   setDutycycle('A', 0);
 }
 
