@@ -1,72 +1,57 @@
-![](./resources/official_armmbed_example_badge.png)
-# Blinky Mbed OS example
+# ENG3039 TDP3 Line Following Robot
 
-The example project is part of the [Arm Mbed OS Official Examples](https://os.mbed.com/code/) and is the [getting started example for Mbed OS](https://os.mbed.com/docs/mbed-os/latest/quick-start/index.html). It contains an application that repeatedly blinks an LED on supported [Mbed boards](https://os.mbed.com/platforms/).
+The robot is designed to traverse a predefined track through use of a line-following algorithm and infrared sensor input being continuously collected in real time. The sensors detect the contrast between the black line and the white floor and adjust the course accordingly. When a barcode is encountered along the track, the robot must scan the card and respond correctly, with each barcode supposed to enforce a pause in movement for a predetermined amount of time. 
 
-You can build the project with all supported [Mbed OS build tools](https://os.mbed.com/docs/mbed-os/latest/tools/index.html). However, this example project specifically refers to the command-line interface tool [Arm Mbed CLI](https://github.com/ARMmbed/mbed-cli#installing-mbed-cli).
-(Note: To see a rendered example you can import into the Arm Online Compiler, please see our [import quick start](https://os.mbed.com/docs/mbed-os/latest/quick-start/online-with-the-online-compiler.html#importing-the-code).)
+This repository contains the source code for this project.
 
-## Mbed OS build tools
+## Flowchart
 
-### Mbed CLI 2
-Starting with version 6.5, Mbed OS uses Mbed CLI 2. It uses Ninja as a build system, and CMake to generate the build environment and manage the build process in a compiler-independent manner. If you are working with Mbed OS version prior to 6.5 then check the section [Mbed CLI 1](#mbed-cli-1).
-1. [Install Mbed CLI 2](https://os.mbed.com/docs/mbed-os/latest/build-tools/install-or-upgrade.html).
-1. From the command-line, import the example: `mbed-tools import mbed-os-example-blinky`
-1. Change the current directory to where the project was imported.
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/cb22ee61-8af6-40d1-b33b-1d2494637ffb" />
 
-### Mbed CLI 1
-1. [Install Mbed CLI 1](https://os.mbed.com/docs/mbed-os/latest/quick-start/offline-with-mbed-cli.html).
-1. From the command-line, import the example: `mbed import mbed-os-example-blinky`
-1. Change the current directory to where the project was imported.
+## PID
 
-## Application functionality
+#### Error Mapping of the Proposed PID Line-following Algorithm
 
-The `main()` function is the single thread in the application. It toggles the state of a digital output connected to an LED on the board.
+| Sensor Input | Binary | Decimal | Output                  |
+|--------------|--------|---------|--------------------------|
+| WBW          | 101    | 5       | `error = error * 0.5`    |
+| BBW          | 001    | 1       | `error = -1`             |
+| BWW          | 011    | 3       |                          |
+| WWB          | 110    | 6       | `error = 1`              |
+| WBB          | 100    | 4       |                          |
+| WWW          | 111    | 7       | `error = error`          |
 
-**Note**: This example requires a target with RTOS support, i.e. one with `rtos` declared in `supported_application_profiles` in `targets/targets.json` in [mbed-os](https://github.com/ARMmbed/mbed-os). For non-RTOS targets (usually with small memory sizes), please use [mbed-os-example-blinky-baremetal](https://github.com/ARMmbed/mbed-os-example-blinky-baremetal) instead.
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/d5b1f3fe-024f-403a-abf4-f161accf90cf" />
+
+## Barcode Detection
+
+<img width="468" alt="image" src="https://github.com/user-attachments/assets/1b61d44f-77a4-499c-b35a-4d59318a51e5" />
+
+<img width="468" alt="image" src="https://github.com/user-attachments/assets/334a762d-091b-4ba3-a1c6-f0d728f0d7b2" />
+
+## Bluetooth Communication and Remote Control
+
+### Table X: Remote Control
+
+| Input Control Mode                     | Key   | Description                                          |
+|---------------------------------------|-------|------------------------------------------------------|
+| Free Control Mode/Memory Updating Mode| W     | Accelerate.                                          |
+|                                       | S     | Deaccelerate                                         |
+|                                       | A     | Turn left.                                           |
+|                                       | D     | Turn right.                                          |
+|                                       | C     | Reset the speed difference to zero.                 |
+| Free Control Mode/Memory Updating Mode| U     | Enable/Disable Memory Updating Mode                 |
+| Free Control Mode/Memory Loading Mode | L     | Enable/Disable Memory Loading Mode                  |
+| Free Control Mode                     | F     | Enable/Disable Line-following PID Mode              |
+| Line-following PID Mode               | [1~8] | For test only. Tune parameters of PID algorithm.    |
+| All Modes                             | Q     | Stop and quit.                                      |
 
 ## Building and running
 
 1. Connect a USB cable between the USB port on the board and the host computer.
-1. Run the following command to build the example project and program the microcontroller flash memory:
-
-    * Mbed CLI 2
-
-    ```bash
-    $ mbed-tools compile -m <TARGET> -t <TOOLCHAIN> --flash
-    ```
-
-    * Mbed CLI 1
-
-    ```bash
-    $ mbed compile -m <TARGET> -t <TOOLCHAIN> --flash
-    ```
+2. Build the project with [Keil Studio Cloud](https://studio.keil.arm.com).
+3. Flash the program into the MCU.
 
 Your PC may take a few minutes to compile your code.
 
-The binary is located at:
-* **Mbed CLI 2** - `./cmake_build/mbed-os-example-blinky.bin`</br>
-* **Mbed CLI 1** - `./BUILD/<TARGET>/<TOOLCHAIN>/mbed-os-example-blinky.bin`
-
-Alternatively, you can manually copy the binary to the board, which you mount on the host computer over USB.
-
-## Expected output
-The LED on your target turns on and off every 500 milliseconds.
-
-
-## Troubleshooting
-If you have problems, you can review the [documentation](https://os.mbed.com/docs/latest/tutorials/debugging.html) for suggestions on what could be wrong and how to fix it.
-
-## Related Links
-
-* [Mbed OS Stats API](https://os.mbed.com/docs/latest/apis/mbed-statistics.html).
-* [Mbed OS Configuration](https://os.mbed.com/docs/latest/reference/configuration.html).
-* [Mbed OS Serial Communication](https://os.mbed.com/docs/latest/tutorials/serial-communication.html).
-* [Mbed OS bare metal](https://os.mbed.com/docs/mbed-os/latest/reference/mbed-os-bare-metal.html).
-* [Mbed boards](https://os.mbed.com/platforms/).
-
-### License and contributions
-
-The software is provided under Apache-2.0 license. Contributions to this project are accepted under the same license. Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for more info.
-
-This project contains code from other projects. The original license text is included in those source files. They must comply with our license guide.
+Alternatively, you can manually copy the binary to the board, which you mount on the host computer over USB. The binary is located at: `./bin/TDP3_software.KL25Z.bin`</br>
