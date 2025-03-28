@@ -9,6 +9,11 @@
 #include "helper.h"
 #include "mbed.h"
 #include "motor.h"
+// #include <chrono>
+
+// using namespace std::chrono;
+
+// Timer timer;
 
 /********************* Define all the pin names********************/
 // For the accerometer
@@ -35,7 +40,7 @@ PinName const bcs2_p = PTE21;
 PinName const bcs3_p = PTE22;
 
 /**************************** Define all the constants*****************/
-#define LOOP_LENGTH 50ms
+#define LOOP_LENGTH 5ms
 
 #define MMA8451_I2C_ADDRESS (0x1d << 1)
 
@@ -91,6 +96,7 @@ DigitalIn lfs1(lfs1_p);
 DigitalIn lfs2(lfs2_p);
 DigitalIn lfs3(lfs3_p);
 
+PID pid = PID();
 Barcode bcs(bcs1_p, bcs2_p, bcs3_p);
 
 // DigitalIn
@@ -116,11 +122,11 @@ int main() {
   float ang_acc = 0.4;   // angular acc
 
   // For PID: 0.2; 0.01; 0.002;
-  // For PID: 0.01; 0.012; 0.001; v0 = 0.018; 0305 update for fully charged
-  // battery
-  float v0 = 0.018;
-  float Kp = 0.0100;
-  float Ki = 0.0120;
+  // For PID: 0.200; 0.010; 0.001; v0 = 0.08; 0327 update for fully charged for
+  // 5ms loop length
+  float v0 = 0.072;
+  float Kp = 0.200;
+  float Ki = 0.0100;
   float Kd = 0.0010;
   float int_atten = 0.9;
 
@@ -137,20 +143,26 @@ int main() {
   */
   char mem_buffer[MEM_SIZE] = "wwssq";
 
+  long ave_fetch_t = 0;
+  long ave_decode_t = 0;
+  long ave_execute_t = 0;
+  long ave_log_t = 0;
+
   printf("all initailization finished successfully\n");
   //   green_led = 1;
-  PID pid = PID();
+  //   timer.start();
 
   /*************************** LOOP ***************************************/
   while (true) {
-    bcs.updateState();
+    // timer.reset();
 
+    // Accelerometer, not needed yet.
     // x = abs(acc.getAccX());
     // y = abs(acc.getAccY());
     // z = abs(acc.getAccZ());
     // printf("accX: %1.2f, accY: %1.2f, accZ: %1.2f\n", x, y, z);
 
-    /************************** UPDATE INPUT ********************************/
+    /************************** Fetch ********************************/
 
     // if update key by keyboard input
     if (uart.readable()) {
@@ -160,14 +172,16 @@ int main() {
     }
 
     if (lfs1_value == lfs1 or lfs2_value == lfs2 or lfs3_value == lfs3) {
-      n_force_print = 1;
+      //   n_force_print = 1;
     }
 
     lfs1_value = !lfs1;
     lfs2_value = !lfs2;
     lfs3_value = !lfs3;
 
-    /************************** UPDATE MODE ********************************/
+    // ave_fetch_t = duration_cast<microseconds>(timer.elapsed_time()).count();
+    // timer.reset();
+    /************************** Decode ********************************/
 
     switch (mode) {
     case FREE_CTRL: {
@@ -183,7 +197,7 @@ int main() {
       // if update key by mem
       key = mem_buffer[mem_index];
       mem_index += 1;
-      printf("mem index %d\t", mem_index);
+      printf("mem index %d\timer", mem_index);
       // if out of index
       if (mem_index == MEM_SIZE - 1) {
         // is_mem_loading = false;
@@ -205,7 +219,7 @@ int main() {
 
       mem_buffer[mem_index] = key;
       mem_index += 1;
-      printf("mem index %d\t", mem_index);
+      printf("mem index %d\timer", mem_index);
       n_force_print = 2;
 
       if (mem_index == MEM_SIZE - 1) {
@@ -231,12 +245,12 @@ int main() {
       left_v = v0 + pid.delta_v;
       right_v = v0 - pid.delta_v;
 
-      if (bcs.state == Barcode::bwb or bcs.state == Barcode::bww or
-          bcs.state == Barcode::wwb) {
-        left_v = 0.01;
-        right_v = 0.01;
+      bcs.updateBCS();
+      bcs.updateState2();
+      if (bcs.task != 0) {
+        motor.setDutycycle('A', 0, 0);
       }
-      //   bcs.updateState();
+      bcs.performTask();
 
       //   key = '0';
       break;
@@ -252,11 +266,14 @@ int main() {
     }
     }
 
-    /**************************** OUTPUT ***********************************/
+    // ave_decode_t = duration_cast<microseconds>(timer.elapsed_time()).count();
+    // timer.reset();
+
+    /**************************** Excute ***********************************/
     switch (key) {
     /********************* READ LED *************************/
     case KEY_LED_R: {
-      printf("red_led = %d\t", red_led.read());
+      printf("red_led = %d\timer", red_led.read());
     }
     /********************* CONTROL MOTOR *************************/
     case KEY_ACC: {
@@ -356,23 +373,23 @@ int main() {
 
     /********************* TESTING *************************/
     case KEY_Kp_PLUS: {
-      Kp += 0.001;
+      Kp += 0.01;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
     case KEY_Kp_MINUS: {
-      Kp -= 0.001;
+      Kp -= 0.01;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
 
     case KEY_Ki_PLUS: {
-      Ki += 0.0001;
+      Ki += 0.001;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
     case KEY_Ki_MINUS: {
-      Ki -= 0.0001;
+      Ki -= 0.001;
       pid.setPID(Kp, Ki, Kd);
       break;
     }
@@ -401,7 +418,7 @@ int main() {
     }
 
     // force to load the mem whatever the input
-    // printf("%d\t", force_mem_loading_input.read());
+    // printf("%d\timer", force_mem_loading_input.read());
 
     if (force_mem_loading_input.read() == 0 or
         is_first_loop_mem_loading == true) {
@@ -419,16 +436,22 @@ int main() {
       printf("force to go!\t");
     }
 
-    /**************************** UPDATE MOTORS *****************************/
+    /******************* UPDATE MOTORS ***********************/
     left_v = clamp(left_v, -1.0f, 1.0f);
     right_v = clamp(right_v, -1.0f, 1.0f);
     motor.setDutycycle('A', left_v, right_v);
 
-    /**************************** TEST LOG *****************************/
+    // ave_execute_t =
+    // duration_cast<microseconds>(timer.elapsed_time()).count(); timer.reset();
+
+    /**************************** LOG *****************************/
 
     if (key != '0' or n_force_print) {
+      //   printf("\n %lu %lu %lu %lu \n", ave_fetch_t, ave_decode_t,
+      //   ave_execute_t, ave_log_t);
       printf("input: %c, mode: %d,\t", key, mode);
-    //   printf("debug: %d, %d, %d (1e-4), %d m\t", int(Kp * 10000), int(Ki * 10000), int(Kd * 10000), int(v0 * 1000));
+      printf("debug: %d, %d, %d (1e-4), %d m \n", int(Kp * 10000),
+             int(Ki * 10000), int(Kd * 10000), int(v0 * 1000));
 
       //   if (mode == LF_PID) {
       //     printf("\n c: %d, error: %d, dv: %d, \n", pid.c, int(pid.error *
@@ -436,15 +459,20 @@ int main() {
       //            int(pid.delta_v * 1000));
       //   }
       //   int value_lfs1 = lfs1;
-    //   printf("lf_sensors: %d, %d, %d,\t", lfs1_value, lfs2_value, lfs3_value);
+      //   printf("lf_sensors: %d, %d, %d,\timer", lfs1_value, lfs2_value,
+      //   lfs3_value);
 
-    //   printf("left_v = %dm\t right_v = %dm\n", int(left_v * 1000), int(right_v * 1000));
+      //   printf("left_v = %dm\timer right_v = %dm\n", int(left_v * 1000),
+      //          int(right_v * 1000));
 
       n_force_print -= 1;
       if (n_force_print <= 0) {
         n_force_print = 0;
       }
+      key = '0';
     }
+    // ave_log_t = duration_cast<microseconds>(timer.elapsed_time()).count();
+    // timer.reset();
 
     ThisThread::sleep_for(LOOP_LENGTH);
   }

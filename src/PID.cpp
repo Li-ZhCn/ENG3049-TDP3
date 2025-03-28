@@ -43,6 +43,9 @@ float PID::getError(int lfs1, int lfs2, int lfs3) {
   case 7:
     current_error = error;
     break;
+  case 0:
+    current_error = error;
+    break;
   }
 
   return current_error;
